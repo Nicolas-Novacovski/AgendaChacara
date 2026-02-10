@@ -8,7 +8,6 @@ import {
   List, 
   Sprout, 
   Trash2,
-  CalendarDays,
   Menu,
   X,
   Loader2,
@@ -22,7 +21,8 @@ import {
   Filter,
   ArrowRight,
   CloudSun,
-  CloudRain
+  CloudRain,
+  ClipboardList
 } from 'lucide-react';
 import { Task as TaskType, ViewMode, CATEGORY_LABELS, MONTH_NAMES, UrgencyType } from './types';
 import { loadTasks, createTask, updateTaskStatus, deleteTaskFromDb } from './services/storageService';
@@ -39,6 +39,9 @@ const App: React.FC = () => {
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
+  // Estado para o dia selecionado no calendário
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+
   // Estados de Clima Fixo (Mandirituba - PR)
   const [weather, setWeather] = useState<WeatherData | null>(null);
 
@@ -52,7 +55,6 @@ const App: React.FC = () => {
     const fetchData = async () => {
       setLoading(true);
       
-      // Busca clima de Mandirituba, PR
       const MANDIRITUBA_LAT = -25.7797;
       const MANDIRITUBA_LON = -49.3283;
       
@@ -123,7 +125,7 @@ const App: React.FC = () => {
     return tasks.filter(t => t.specificDate === dateStr);
   };
 
-  const renderTaskCard = (task: TaskType) => {
+  const renderTaskCard = (task: TaskType, compact = false) => {
     const urgencyStyles = {
       high: 'border-l-red-500 bg-red-50/30',
       medium: 'border-l-nature-moss bg-white',
@@ -134,17 +136,19 @@ const App: React.FC = () => {
       <div key={task.id} className={`group p-5 rounded-2xl border-2 border-stone-100 transition-all duration-300 hover:shadow-xl hover:scale-[1.01] flex flex-col gap-3 border-l-8 ${task.isCompleted ? 'opacity-50 grayscale border-l-stone-200' : urgencyStyles[task.urgency]}`}>
         <div className="flex items-start gap-4">
           <button onClick={() => toggleTask(task.id)} className={`mt-1 transition-transform active:scale-75 ${task.isCompleted ? 'text-nature-moss' : 'text-stone-300 hover:text-nature-moss'}`}>
-            {task.isCompleted ? <CheckCircle2 size={32} /> : <Circle size={32} />}
+            {task.isCompleted ? <CheckCircle2 size={compact ? 24 : 32} /> : <Circle size={compact ? 24 : 32} />}
           </button>
           
           <div className="flex-1">
             <div className="flex justify-between items-start">
-              <h3 className={`font-black text-xl leading-tight ${task.isCompleted ? 'line-through text-stone-400' : 'text-stone-800'}`}>
+              <h3 className={`font-black leading-tight ${compact ? 'text-lg' : 'text-xl'} ${task.isCompleted ? 'line-through text-stone-400' : 'text-stone-800'}`}>
                 {task.title}
               </h3>
-              <button onClick={() => deleteTask(task.id)} className="text-stone-300 hover:text-red-500 transition-opacity opacity-0 group-hover:opacity-100 p-1">
-                <Trash2 size={20} />
-              </button>
+              {!compact && (
+                <button onClick={() => deleteTask(task.id)} className="text-stone-300 hover:text-red-500 transition-opacity opacity-0 group-hover:opacity-100 p-1">
+                  <Trash2 size={20} />
+                </button>
+              )}
             </div>
             
             {task.description && !task.isCompleted && (
@@ -160,7 +164,6 @@ const App: React.FC = () => {
                   <AlertTriangle size={10} /> Urgente
                 </span>
               )}
-              {task.specificDate && <span className="text-[10px] font-black text-stone-500 bg-stone-100 px-3 py-1 rounded-full">{new Date(task.specificDate + 'T12:00:00').toLocaleDateString('pt-BR')}</span>}
             </div>
           </div>
         </div>
@@ -174,6 +177,11 @@ const App: React.FC = () => {
     if (weather.icon === 'rain') return <CloudRain size={48} className="text-blue-200" />;
     return <CloudSun size={48} className="text-white/80" />;
   };
+
+  const selectedDateTasks = useMemo(() => {
+    if (!selectedCalendarDate) return [];
+    return tasks.filter(t => t.specificDate === selectedCalendarDate);
+  }, [tasks, selectedCalendarDate]);
 
   return (
     <div className="min-h-screen bg-nature-offWhite text-stone-800 font-sans flex flex-col lg:flex-row">
@@ -205,7 +213,7 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      {/* Backdrop */}
+      {/* Backdrop Mobile Sidebar */}
       {mobileMenuOpen && <div className="fixed inset-0 bg-black/60 z-30 lg:hidden" onClick={() => setMobileMenuOpen(false)}></div>}
 
       {/* Main */}
@@ -255,7 +263,7 @@ const App: React.FC = () => {
                     </div>
                     <div className="space-y-4">
                       {tasks.filter(t => t.urgency === 'high' && !t.isCompleted).length > 0 ? (
-                        tasks.filter(t => t.urgency === 'high' && !t.isCompleted).map(renderTaskCard)
+                        tasks.filter(t => t.urgency === 'high' && !t.isCompleted).map(t => renderTaskCard(t))
                       ) : (
                         <div className="py-12 border-4 border-dashed border-stone-100 rounded-[2.5rem] text-center text-stone-300 font-black uppercase tracking-widest">Nenhuma tarefa urgente no momento!</div>
                       )}
@@ -265,7 +273,7 @@ const App: React.FC = () => {
               )}
 
               {view === 'calendar' && (
-                <div className="bg-white rounded-[3rem] border-2 border-stone-100 shadow-2xl overflow-hidden animate-fade-in">
+                <div className="bg-white rounded-[3rem] border-2 border-stone-100 shadow-2xl overflow-hidden animate-fade-in relative">
                   <div className="bg-nature-mossDark p-10 flex flex-col sm:flex-row justify-between items-center gap-6 text-white">
                     <h2 className="text-4xl font-black capitalize tracking-tighter">{MONTH_NAMES[calDate.getMonth()]} {calDate.getFullYear()}</h2>
                     <div className="flex gap-3">
@@ -281,22 +289,80 @@ const App: React.FC = () => {
                       ))}
                     </div>
                     <div className="grid grid-cols-7 gap-4">
-                      {calendarDays.map((day, i) => (
-                        <div key={i} className={`aspect-square rounded-[2rem] border-2 flex flex-col items-center justify-center relative transition-all ${day ? 'border-stone-50 bg-stone-50/50 hover:bg-white hover:shadow-xl hover:scale-110 cursor-pointer' : 'border-transparent'}`}>
-                          {day && (
-                            <>
-                              <span className="font-black text-xl text-stone-700">{day}</span>
-                              <div className="flex gap-1 mt-2">
-                                {getTasksForDay(day).slice(0, 3).map((t, idx) => (
-                                  <div key={idx} className={`w-2 h-2 rounded-full ${t.urgency === 'high' ? 'bg-red-500' : 'bg-nature-moss'}`}></div>
-                                ))}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      ))}
+                      {calendarDays.map((day, i) => {
+                        const dayTasks = getTasksForDay(day);
+                        const hasUrgent = dayTasks.some(t => t.urgency === 'high' && !t.isCompleted);
+                        const isToday = day && day === new Date().getDate() && calDate.getMonth() === new Date().getMonth() && calDate.getFullYear() === new Date().getFullYear();
+                        const dateKey = day ? `${calDate.getFullYear()}-${String(calDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : null;
+
+                        return (
+                          <div 
+                            key={i} 
+                            onClick={() => {
+                              if (day && dayTasks.length > 0) {
+                                setSelectedCalendarDate(dateKey);
+                              }
+                            }}
+                            className={`aspect-square rounded-[2rem] border-2 flex flex-col items-center justify-center relative transition-all group ${
+                              day 
+                                ? `border-stone-50 bg-stone-50/50 hover:bg-white hover:shadow-xl hover:scale-105 ${dayTasks.length > 0 ? 'cursor-pointer' : ''}` 
+                                : 'border-transparent'
+                            } ${hasUrgent ? 'border-red-200 bg-red-50/20 shadow-inner' : ''} ${isToday ? 'border-nature-moss bg-nature-moss/10' : ''}`}
+                          >
+                            {day && (
+                              <>
+                                <span className={`font-black text-xl ${isToday ? 'text-nature-moss' : 'text-stone-700'}`}>{day}</span>
+                                <div className="flex gap-1 mt-2">
+                                  {dayTasks.slice(0, 3).map((t, idx) => (
+                                    <div key={idx} className={`w-2 h-2 rounded-full ${t.urgency === 'high' ? 'bg-red-500' : 'bg-nature-moss'} ${t.isCompleted ? 'opacity-30' : ''}`}></div>
+                                  ))}
+                                  {dayTasks.length > 3 && <div className="w-1.5 h-1.5 rounded-full bg-stone-300"></div>}
+                                </div>
+                                {dayTasks.length > 0 && (
+                                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <ClipboardList size={14} className="text-nature-moss" />
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
+
+                  {/* Modal de Detalhes do Dia Selecionado */}
+                  {selectedCalendarDate && (
+                    <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-nature-mossDark/40 backdrop-blur-sm animate-fade-in">
+                      <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md max-h-[80%] flex flex-col overflow-hidden border-t-8 border-nature-moss">
+                        <div className="p-6 border-b border-stone-100 flex justify-between items-center bg-stone-50">
+                          <div>
+                            <h3 className="text-2xl font-black text-nature-mossDark">Lida do Dia</h3>
+                            <p className="text-stone-400 text-xs font-bold uppercase tracking-widest">
+                              {new Date(selectedCalendarDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                            </p>
+                          </div>
+                          <button 
+                            onClick={() => setSelectedCalendarDate(null)}
+                            className="p-2 hover:bg-stone-200 rounded-full text-stone-500 transition-colors"
+                          >
+                            <X size={28} />
+                          </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                          {selectedDateTasks.map(t => renderTaskCard(t, true))}
+                        </div>
+                        <div className="p-4 bg-stone-50 border-t border-stone-100 text-center">
+                          <button 
+                            onClick={() => setSelectedCalendarDate(null)}
+                            className="w-full py-4 bg-nature-moss text-white font-black rounded-2xl hover:bg-nature-mossDark transition-all"
+                          >
+                            ENTENDIDO
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -331,7 +397,7 @@ const App: React.FC = () => {
 
                   <div className="grid grid-cols-1 gap-4">
                     {filteredTasks.length > 0 ? (
-                      filteredTasks.map(renderTaskCard)
+                      filteredTasks.map(t => renderTaskCard(t))
                     ) : (
                       <div className="py-20 text-center bg-white rounded-[2.5rem] border-2 border-dashed border-stone-100">
                         <Filter className="mx-auto text-stone-200 mb-4" size={48} />
