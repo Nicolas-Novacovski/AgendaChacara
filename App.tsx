@@ -21,37 +21,50 @@ import {
   AlertTriangle,
   Filter,
   ArrowRight,
-  CloudSun
+  CloudSun,
+  CloudRain
 } from 'lucide-react';
-import { Task as TaskType, ViewMode, CATEGORY_LABELS, MONTH_NAMES, DailyLog, UrgencyType } from './types';
-import { loadTasks, createTask, updateTaskStatus, deleteTaskFromDb, saveDailyLog, getLatestLogs } from './services/storageService';
+import { Task as TaskType, ViewMode, CATEGORY_LABELS, MONTH_NAMES, UrgencyType } from './types';
+import { loadTasks, createTask, updateTaskStatus, deleteTaskFromDb } from './services/storageService';
 import { isSupabaseConfigured } from './services/supabaseClient';
+import { fetchWeather, WeatherData } from './services/weatherService';
 import TaskForm from './components/TaskForm';
 import AssistantModal from './components/AssistantModal';
 
 const App: React.FC = () => {
   const [tasks, setTasks] = useState<TaskType[]>([]);
-  const [logs, setLogs] = useState<DailyLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<ViewMode>('dashboard');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
+  // Estados de Clima Fixo (Mandirituba - PR)
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+
   // Filtros
   const [filterUrgency, setFilterUrgency] = useState<UrgencyType | 'all'>('all');
   const [filterCategory, setFilterCategory] = useState<string | 'all'>('all');
 
   const [calDate, setCalDate] = useState(new Date());
-  const [logInput, setLogInput] = useState('');
-  const [isSavingLog, setIsSavingLog] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const [tData, lData] = await Promise.all([loadTasks(), getLatestLogs()]);
+      
+      // Busca clima de Mandirituba, PR
+      const MANDIRITUBA_LAT = -25.7797;
+      const MANDIRITUBA_LON = -49.3283;
+      
+      try {
+        const wData = await fetchWeather(MANDIRITUBA_LAT, MANDIRITUBA_LON);
+        setWeather(wData);
+      } catch (err) {
+        console.error("Erro ao carregar clima de Mandirituba");
+      }
+
+      const tData = await loadTasks();
       setTasks(tData);
-      setLogs(lData);
       setLoading(false);
     };
     fetchData();
@@ -77,15 +90,13 @@ const App: React.FC = () => {
     if (createdTask) setTasks(prev => [createdTask, ...prev]);
   };
 
-  const handleSaveLog = async () => {
-    if (!logInput.trim()) return;
-    setIsSavingLog(true);
-    await saveDailyLog(logInput);
-    const updatedLogs = await getLatestLogs();
-    setLogs(updatedLogs);
-    setLogInput('');
-    setIsSavingLog(false);
-  };
+  const farmingAdviceByWeather = useMemo(() => {
+    if (!weather) return "Carregando clima...";
+    if (weather.icon === 'rain') return "Dia de chuva em Mandirituba! Bom para o solo absorver adubo, mas cuidado com enxurradas.";
+    if (weather.temp > 30) return "Calor forte na chácara! Hora de dobrar a água dos animais e evitar o sol do meio-dia.";
+    if (weather.temp < 15) return "Frio chegando em Mandirituba. Proteja as mudas mais sensíveis na baixada.";
+    return "Tempo bom para a lida geral na chácara. Aproveite para limpar as ferramentas.";
+  }, [weather]);
 
   const filteredTasks = useMemo(() => {
     return tasks.filter(t => {
@@ -111,19 +122,6 @@ const App: React.FC = () => {
     const dateStr = `${calDate.getFullYear()}-${String(calDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     return tasks.filter(t => t.specificDate === dateStr);
   };
-
-  const plantingTips = useMemo(() => {
-    const month = new Date().getMonth();
-    const tips = [
-      ["Alface", "Couve", "Rabanete"], ["Cenoura", "Beterraba", "Salsa"],
-      ["Brócolis", "Espinafre", "Ervilha"], ["Alho", "Cebola", "Morango"],
-      ["Couve-flor", "Repolho", "Feijão"], ["Milho", "Abóbora", "Pepino"],
-      ["Batata", "Tomate", "Pimentão"], ["Melancia", "Melão", "Quiabo"],
-      ["Berinjela", "Jiló", "Vagem"], ["Arroz", "Amendoim", "Soja"],
-      ["Mandioca", "Inhame", "Batata-doce"], ["Girassol", "Gergelim", "Chia"]
-    ];
-    return tips[month] || ["Hortaliças em geral"];
-  }, []);
 
   const renderTaskCard = (task: TaskType) => {
     const urgencyStyles = {
@@ -168,6 +166,13 @@ const App: React.FC = () => {
         </div>
       </div>
     );
+  };
+
+  const WeatherIcon = () => {
+    if (!weather) return <Loader2 className="animate-spin text-white/50" />;
+    if (weather.icon === 'sun') return <Sun size={48} className="text-yellow-200" />;
+    if (weather.icon === 'rain') return <CloudRain size={48} className="text-blue-200" />;
+    return <CloudSun size={48} className="text-white/80" />;
   };
 
   return (
@@ -216,59 +221,30 @@ const App: React.FC = () => {
               {view === 'dashboard' && (
                 <div className="space-y-12 animate-fade-in">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* Clima Mock */}
-                    <div className="bg-gradient-to-br from-sky-400 to-blue-500 p-8 rounded-[2.5rem] text-white shadow-xl flex flex-col justify-between">
-                       <div className="flex justify-between items-start">
+                    {/* Clima Mandirituba */}
+                    <div className="bg-gradient-to-br from-sky-400 to-blue-600 p-8 rounded-[2.5rem] text-white shadow-2xl flex flex-col justify-between relative overflow-hidden">
+                       <div className="flex justify-between items-start relative z-10">
                           <div>
-                            <p className="text-white/60 font-black text-[10px] uppercase tracking-widest">Clima na Chácara</p>
-                            <h4 className="text-4xl font-black">28°C</h4>
+                            <p className="text-white/60 font-black text-[10px] uppercase tracking-widest">Mandirituba - PR</p>
+                            <h4 className="text-5xl font-black">{weather ? `${weather.temp}°C` : '--°C'}</h4>
+                            <p className="font-bold text-xs mt-1 text-sky-100">{weather?.description || 'Buscando...'}</p>
                           </div>
-                          <CloudSun size={48} className="text-white/80" />
+                          <WeatherIcon />
                        </div>
-                       <p className="font-bold text-sm mt-4">Sol entre nuvens.<br/>Ideal para limpeza.</p>
+                       
+                       <div className="mt-4 pt-4 border-t border-white/10 relative z-10">
+                          <p className="font-black text-[10px] uppercase tracking-widest text-white/40 mb-1">Dica do Agrônomo</p>
+                          <p className="font-bold text-sm leading-tight text-white/90">{farmingAdviceByWeather}</p>
+                       </div>
                     </div>
 
                     <div className="bg-nature-mossDark p-8 rounded-[2.5rem] text-white shadow-xl md:col-span-2 relative overflow-hidden">
                        <div className="relative z-10">
                          <h2 className="text-4xl font-black mb-4 tracking-tighter">Bom dia, pai!</h2>
-                         <p className="text-nature-sand/60 font-bold max-w-xs">Temos {tasks.filter(t => t.urgency === 'high' && !t.isCompleted).length} coisas urgentes hoje.</p>
+                         <p className="text-nature-sand/60 font-bold max-w-xs">Temos {tasks.filter(t => t.urgency === 'high' && !t.isCompleted).length} coisas urgentes em Mandirituba hoje.</p>
                          <button onClick={() => setView('tasks')} className="mt-6 flex items-center gap-2 bg-nature-moss px-6 py-3 rounded-2xl font-black text-sm hover:gap-4 transition-all uppercase tracking-widest">Ver Urgências <ArrowRight size={18}/></button>
                        </div>
                        <Sprout size={180} className="absolute -bottom-10 -right-10 opacity-10 rotate-12" />
-                    </div>
-                  </div>
-
-                  {/* Diário Compacto */}
-                  <div className="bg-white p-8 rounded-[2.5rem] border-2 border-stone-100 shadow-sm space-y-6">
-                    <div className="flex items-center gap-4 text-nature-mossDark">
-                      <div className="p-3 bg-nature-sand rounded-2xl"><PenTool size={28} /></div>
-                      <div>
-                        <h3 className="font-black text-xl">O que aconteceu hoje?</h3>
-                        <p className="text-stone-400 text-xs font-bold uppercase tracking-widest">Diário de Observações</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-3">
-                      <input 
-                        value={logInput}
-                        onChange={(e) => setLogInput(e.target.value)}
-                        placeholder="Ex: Começamos a colheita, choveu granizo..." 
-                        className="flex-1 bg-stone-50 border-2 border-stone-100 rounded-[1.5rem] px-6 py-4 text-lg font-bold focus:border-nature-moss outline-none transition-all"
-                      />
-                      <button 
-                        onClick={handleSaveLog}
-                        disabled={isSavingLog || !logInput.trim()}
-                        className="px-8 bg-nature-earth text-white rounded-[1.5rem] font-black active:scale-95 disabled:opacity-50 transition-all shadow-lg shadow-nature-earth/20"
-                      >
-                        {isSavingLog ? '...' : 'SALVAR'}
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
-                      {logs.slice(0, 4).map(log => (
-                        <div key={log.id} className="text-xs bg-stone-50 p-4 rounded-2xl flex flex-col gap-2 border-l-4 border-nature-earth shadow-sm">
-                          <p className="text-stone-800 font-bold leading-relaxed">"{log.content}"</p>
-                          <span className="text-stone-400 font-black uppercase text-[9px]">{new Date(log.log_date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}</span>
-                        </div>
-                      ))}
                     </div>
                   </div>
 
@@ -281,7 +257,7 @@ const App: React.FC = () => {
                       {tasks.filter(t => t.urgency === 'high' && !t.isCompleted).length > 0 ? (
                         tasks.filter(t => t.urgency === 'high' && !t.isCompleted).map(renderTaskCard)
                       ) : (
-                        <div className="py-12 border-4 border-dashed border-stone-100 rounded-[2.5rem] text-center text-stone-300 font-black uppercase tracking-widest">Tudo tranquilo por enquanto!</div>
+                        <div className="py-12 border-4 border-dashed border-stone-100 rounded-[2.5rem] text-center text-stone-300 font-black uppercase tracking-widest">Nenhuma tarefa urgente no momento!</div>
                       )}
                     </div>
                   </section>
@@ -329,7 +305,6 @@ const App: React.FC = () => {
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6">
                     <h2 className="text-5xl font-black text-nature-mossDark tracking-tighter">Tarefas</h2>
                     
-                    {/* Filtros */}
                     <div className="flex flex-wrap gap-2">
                        <select 
                          value={filterUrgency} 

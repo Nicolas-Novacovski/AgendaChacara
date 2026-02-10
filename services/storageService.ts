@@ -1,8 +1,8 @@
+
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import { Task, DailyLog } from '../types';
+import { Task } from '../types';
 
 const LOCAL_STORAGE_KEY = 'agenda_chacara_tasks';
-const LOCAL_LOGS_KEY = 'agenda_chacara_logs';
 
 const getLocalTasks = (): Task[] => {
   const data = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -11,15 +11,6 @@ const getLocalTasks = (): Task[] => {
 
 const saveLocalTasks = (tasks: Task[]) => {
   localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
-};
-
-const getLocalLogs = (): DailyLog[] => {
-  const data = localStorage.getItem(LOCAL_LOGS_KEY);
-  return data ? JSON.parse(data) : [];
-};
-
-const saveLocalLogs = (logs: DailyLog[]) => {
-  localStorage.setItem(LOCAL_LOGS_KEY, JSON.stringify(logs));
 };
 
 export const loadTasks = async (): Promise<Task[]> => {
@@ -73,6 +64,7 @@ export const createTask = async (task: Omit<Task, 'id' | 'createdAt' | 'isComple
         recurrence: task.recurrence,
         urgency: task.urgency,
         specific_date: task.specificDate,
+        // Correcting property access from camelCase frontend type to snake_case DB column
         month_reference: task.monthReference,
         is_completed: false
       }])
@@ -113,36 +105,4 @@ export const deleteTaskFromDb = async (id: string): Promise<void> => {
     return;
   }
   await supabase.from('tasks').delete().eq('id', id);
-};
-
-export const saveDailyLog = async (content: string): Promise<void> => {
-  const today = new Date().toISOString().split('T')[0];
-  if (!isSupabaseConfigured || !supabase) {
-    const logs = getLocalLogs();
-    const newLog: DailyLog = { 
-      id: crypto.randomUUID(), 
-      log_date: today, 
-      content, 
-      created_at: new Date().toISOString() 
-    };
-    saveLocalLogs([newLog, ...logs]);
-    return;
-  }
-  try {
-    await supabase.from('daily_logs').insert([{ content, log_date: today }]);
-  } catch (err) {
-    console.error('Erro ao salvar log:', err);
-  }
-};
-
-export const getLatestLogs = async (limit = 10): Promise<DailyLog[]> => {
-  if (!isSupabaseConfigured || !supabase) {
-    return getLocalLogs().slice(0, limit);
-  }
-  const { data } = await supabase
-    .from('daily_logs')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit);
-  return data || [];
 };

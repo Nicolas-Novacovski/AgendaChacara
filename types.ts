@@ -15,13 +15,6 @@ export interface Task {
   createdAt: number;
 }
 
-export interface DailyLog {
-  id: string;
-  log_date: string;
-  content: string;
-  created_at: string;
-}
-
 export type ViewMode = 'dashboard' | 'calendar' | 'tasks';
 
 export const CATEGORY_LABELS: Record<string, string> = {
