@@ -1,14 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+// No Vite, process.env é injetado via define no vite.config.ts
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
-// Só inicializa se tivermos uma URL válida que comece com http
-// Isso evita o erro "supabaseUrl is required" durante o carregamento do script
-export const supabase = (supabaseUrl && supabaseUrl.startsWith('http')) 
-  ? createClient(supabaseUrl, supabaseAnonKey) 
+export const isSupabaseConfigured = !!(
+  supabaseUrl && 
+  supabaseUrl !== 'undefined' && 
+  supabaseUrl.startsWith('http') &&
+  supabaseAnonKey &&
+  supabaseAnonKey !== 'undefined'
+);
+
+export const supabase = isSupabaseConfigured 
+  ? createClient(supabaseUrl as string, supabaseAnonKey as string) 
   : null;
 
-if (!supabase) {
-  console.warn('Supabase: Variáveis de ambiente SUPABASE_URL ou SUPABASE_ANON_KEY não encontradas ou inválidas.');
+if (!isSupabaseConfigured) {
+  console.log('Aviso: Supabase não configurado. Usando armazenamento local temporário.');
 }

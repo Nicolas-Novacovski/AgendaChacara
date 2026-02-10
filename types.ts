@@ -6,11 +6,17 @@ export interface Task {
   description?: string;
   isCompleted: boolean;
   recurrence: RecurrenceType;
-  // Tasks can either have a specific date (YYYY-MM-DD) OR just a reference month (0-11)
   specificDate?: string; 
   monthReference?: number;
   category: 'planting' | 'maintenance' | 'animals' | 'general';
   createdAt: number;
+}
+
+export interface DailyLog {
+  id: string;
+  log_date: string;
+  content: string;
+  created_at: string;
 }
 
 export type ViewMode = 'dashboard' | 'calendar' | 'tasks';
